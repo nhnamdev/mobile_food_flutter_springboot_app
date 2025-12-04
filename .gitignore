@@ -1,0 +1,115 @@
+# ========================
+# BACKEND (Spring Boot)
+# ========================
+
+# Maven
+backend/target/
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+
+# IDE
+backend/.idea/
+backend/*.iml
+backend/.settings/
+backend/.project
+backend/.classpath
+
+# Logs
+backend/*.log
+backend/logs/
+
+# ========================
+# FRONTEND (Flutter)
+# ========================
+
+# Flutter/Dart
+frontend/.dart_tool/
+frontend/.packages
+frontend/.pub-cache/
+frontend/.pub/
+frontend/build/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+
+# IDE
+frontend/.idea/
+frontend/*.iml
+frontend/.vscode/
+
+# iOS
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+frontend/ios/Flutter/ephemeral/
+frontend/ios/Runner.xcworkspace/xcshareddata/
+frontend/ios/Runner.xcworkspace/xcuserdata/
+frontend/ios/Runner.xcodeproj/xcuserdata/
+frontend/ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Android
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/app/debug/
+frontend/android/app/profile/
+frontend/android/app/release/
+frontend/android/build/
+frontend/android/app/build/
+
+# macOS
+frontend/macos/Flutter/ephemeral/
+frontend/macos/Pods/
+
+# Linux
+frontend/linux/flutter/ephemeral/
+
+# Windows
+frontend/windows/flutter/ephemeral/
+
+# Web
+frontend/web/.dart_tool/
+
+# ========================
+# GENERAL
+# ========================
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dependencies
+node_modules/
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# Local config
+local.properties
+application-local.properties
+application-local.yml
