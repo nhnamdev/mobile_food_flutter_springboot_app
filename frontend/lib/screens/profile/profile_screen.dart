@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/supabase_google_auth_service.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final int userId;
@@ -375,7 +376,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.settings_outlined,
                       title: 'Cài đặt',
                       onTap: () {
-                        // Navigate to settings
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                        );
                       },
                     ),
                     const Divider(),

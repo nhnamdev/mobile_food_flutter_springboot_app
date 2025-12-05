@@ -12,6 +12,7 @@ import '../../services/local_cart_manager.dart';
 import '../../services/local_favorites_manager.dart';
 import '../auth/sign_in_screen.dart';
 import '../food_detail/food_detail_screen.dart';
+import '../profile/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _notificationCount = notifications.where((n) => n['isRead'] == false).length;
       } else {
         // Demo: 3 thông báo chưa đọc
-        _notificationCount = 3;
+        _notificationCount = 0;
       }
       if (mounted) setState(() {});
     } catch (e) {
@@ -510,7 +511,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Cài đặt',
                     onTap: () {
                       Navigator.pop(context);
-                      // TODO: Navigate to settings
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                      );
                     },
                   ),
                   _buildDrawerItem(

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/app_theme.dart';
 import '../../widgets/food_item_card.dart';
-import '../../services/favorites_service.dart';
+import '../../services/local_favorites_manager.dart';
+import '../../services/food_item_service.dart';
+import '../food_detail/food_detail_screen.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -13,8 +14,10 @@ class FavoritesScreen extends StatefulWidget {
 
 class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<dynamic> _favoriteFoods = [];
-  List<dynamic> _favoriteShops = [];
+  final _favorites = LocalFavoritesManager.instance;
+  
+  List<Map<String, dynamic>> _favoriteFoods = [];
+  List<Map<String, dynamic>> _favoriteShops = [];
   bool _isLoading = true;
 
   @override
@@ -32,18 +35,30 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   Future<void> _loadFavorites() async {
     setState(() => _isLoading = true);
+    
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        final result = await FavoritesService.getFavorites(user.id);
-        setState(() {
-          _favoriteFoods = result['foods'] ?? [];
-          _favoriteShops = result['shops'] ?? [];
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
+      await _favorites.init();
+      
+      // Load chi tiết các món ăn yêu thích từ API
+      final foodIds = _favorites.foodFavorites;
+      final List<Map<String, dynamic>> foods = [];
+      
+      for (final foodId in foodIds) {
+        try {
+          final response = await FoodItemService.getFoodItemById(foodId);
+          if (response['success'] == true && response['data'] != null) {
+            foods.add(Map<String, dynamic>.from(response['data']));
+          }
+        } catch (e) {
+          debugPrint('Error loading food $foodId: $e');
+        }
       }
+      
+      setState(() {
+        _favoriteFoods = foods;
+        _favoriteShops = []; // TODO: Load shop details from API
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -56,18 +71,21 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   Future<void> _removeFavorite(String type, int id) async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        await FavoritesService.removeFavorite(user.id, type, id);
-        await _loadFavorites();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã xóa khỏi yêu thích'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
+      if (type == 'food') {
+        await _favorites.removeFoodFavorite(id);
+      } else {
+        await _favorites.toggleShopFavorite(id);
+      }
+      
+      await _loadFavorites();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã xóa khỏi yêu thích'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -160,6 +178,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         itemCount: _favoriteFoods.length,
         itemBuilder: (context, index) {
           final food = _favoriteFoods[index];
+          final foodId = food['id'] as int?;
+          
           return Dismissible(
             key: Key('food_${food['id']}'),
             direction: DismissDirection.endToStart,
@@ -172,14 +192,31 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               ),
               child: const Icon(Icons.delete, color: Colors.white),
             ),
-            onDismissed: (_) => _removeFavorite('food', food['id']),
+            onDismissed: (_) {
+              if (foodId != null) _removeFavorite('food', foodId);
+            },
             child: FoodItemCard(
+              id: foodId,
               name: food['foodName'] ?? food['name'] ?? 'Món ăn',
-              shopName: food['shopName'] ?? 'Quán ăn',
+              shopName: food['shop']?['shopName'] ?? food['shopName'] ?? 'Quán ăn',
+              shopId: food['shop']?['id'] ?? food['shopId'] ?? 0,
               price: (food['price'] ?? 0).toDouble(),
-              rating: (food['rating'] ?? 4.5).toDouble(),
-              imageUrl: food['image'],
-              onTap: () => _removeFavorite('food', food['id']),
+              rating: (food['averageRating'] ?? food['rating'] ?? 4.5).toDouble(),
+              imageUrl: food['image'] ?? food['imageUrl'],
+              showFavorite: false,
+              onTap: () {
+                if (foodId != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FoodDetailScreen(
+                        foodId: foodId,
+                        initialData: food,
+                      ),
+                    ),
+                  ).then((_) => _loadFavorites());
+                }
+              },
             ),
           );
         },
