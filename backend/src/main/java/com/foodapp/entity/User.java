@@ -25,6 +25,9 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
+    @Column(name = "supabase_uid", unique = true)
+    private String supabaseUid;
+    
     @Column(unique = true, nullable = false)
     private String email;
     

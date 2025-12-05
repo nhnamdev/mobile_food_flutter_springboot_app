@@ -144,6 +144,53 @@ public class UserService {
         userRepository.save(user);
     }
     
+    /**
+     * Sync user từ Supabase/Google OAuth vào database
+     * - Nếu user đã tồn tại (theo supabaseUid hoặc email) → update
+     * - Nếu user chưa tồn tại → tạo mới
+     */
+    @Transactional
+    public UserResponse syncGoogleUser(com.foodapp.dto.request.GoogleAuthRequest request) {
+        // Tìm user theo supabaseUid trước
+        User user = userRepository.findBySupabaseUid(request.getSupabaseUid())
+                .orElse(null);
+        
+        if (user == null) {
+            // Nếu không tìm thấy theo UID, thử tìm theo email
+            user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        }
+        
+        if (user != null) {
+            // User đã tồn tại → update thông tin
+            user.setSupabaseUid(request.getSupabaseUid());
+            user.setFullName(request.getFullName());
+            if (request.getAvatar() != null) {
+                user.setAvatar(request.getAvatar());
+            }
+            if (request.getPhone() != null && !request.getPhone().isEmpty()) {
+                user.setPhone(request.getPhone());
+            }
+            user.setIsVerified(true); // Google đã verify email
+            user.setUserStatus(UserStatus.active);
+        } else {
+            // User chưa tồn tại → tạo mới
+            user = new User();
+            user.setSupabaseUid(request.getSupabaseUid());
+            user.setEmail(request.getEmail());
+            user.setFullName(request.getFullName());
+            user.setAvatar(request.getAvatar());
+            user.setPhone(request.getPhone() != null ? request.getPhone() : "");
+            // Tạo password ngẫu nhiên cho OAuth user (họ không cần dùng password)
+            user.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
+            user.setUserRole(UserRole.customer);
+            user.setUserStatus(UserStatus.active);
+            user.setIsVerified(true);
+        }
+        
+        user = userRepository.save(user);
+        return mapToUserResponse(user);
+    }
+    
     private UserResponse mapToUserResponse(User user) {
         return UserResponse.builder()
                 .id(user.getId())
