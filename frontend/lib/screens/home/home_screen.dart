@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 import '../../config/app_theme.dart';
 import '../../widgets/category_chip.dart';
@@ -369,6 +370,258 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     }
+  }
+
+  Widget _buildDrawer() {
+    final user = UserSession.instance;
+    return Drawer(
+      child: Container(
+        color: AppColors.white,
+        child: Column(
+          children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+              decoration: const BoxDecoration(
+                color: AppColors.primaryColor,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    child: ClipOval(
+                      child: user.avatar != null && user.avatar!.isNotEmpty
+                          ? Image.network(
+                              user.avatar!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.person,
+                                size: 40,
+                                color: AppColors.primaryColor,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.person,
+                              size: 40,
+                              color: AppColors.primaryColor,
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    user.fullName ?? 'Khách',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    user.email ?? '',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Menu Items
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _buildDrawerItem(
+                    icon: Icons.home_outlined,
+                    title: 'Trang chủ',
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.person_outline,
+                    title: 'Tài khoản của tôi',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(
+                        context,
+                        '/profile',
+                        arguments: UserSession.instance.toProfileArgs(),
+                      );
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.location_on_outlined,
+                    title: 'Địa chỉ giao hàng',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/addresses');
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'Lịch sử đơn hàng',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/order-history');
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.favorite_border,
+                    title: 'Yêu thích',
+                    badge: _favorites.foodFavoritesCount,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/favorites');
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.notifications_outlined,
+                    title: 'Thông báo',
+                    badge: _notificationCount,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/notifications');
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.shopping_cart_outlined,
+                    title: 'Giỏ hàng',
+                    badge: _cart.itemCount,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, '/cart');
+                    },
+                  ),
+                  const Divider(),
+                  _buildDrawerItem(
+                    icon: Icons.settings_outlined,
+                    title: 'Cài đặt',
+                    onTap: () {
+                      Navigator.pop(context);
+                      // TODO: Navigate to settings
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.help_outline,
+                    title: 'Trợ giúp & Hỗ trợ',
+                    onTap: () {
+                      Navigator.pop(context);
+                      // TODO: Navigate to help
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.info_outline,
+                    title: 'Về ứng dụng',
+                    onTap: () {
+                      Navigator.pop(context);
+                      showAboutDialog(
+                        context: context,
+                        applicationName: 'Food Delivery',
+                        applicationVersion: '1.0.0',
+                        applicationIcon: const Icon(
+                          Icons.restaurant,
+                          size: 50,
+                          color: AppColors.primaryColor,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            
+            // Logout
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    // Show confirmation dialog
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Đăng xuất'),
+                        content: const Text('Bạn có chắc muốn đăng xuất?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Hủy'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Đăng xuất', style: TextStyle(color: AppColors.error)),
+                          ),
+                        ],
+                      ),
+                    );
+                    
+                    if (confirm == true) {
+                      await Supabase.instance.client.auth.signOut();
+                      if (mounted) {
+                        Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.logout, color: AppColors.error),
+                  label: const Text('Đăng xuất', style: TextStyle(color: AppColors.error)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.error),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    int badge = 0,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: AppColors.textPrimary),
+      title: Text(title),
+      trailing: badge > 0
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                badge > 99 ? '99+' : badge.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : null,
+      onTap: onTap,
+    );
   }
 
   @override
