@@ -20,6 +20,8 @@ class AppColors {
   static const Color error = Color(0xFFFF0404);
   static const Color success = Color(0xFF4CAF50);
   static const Color star = Color(0xFFFFD700);
+  static const Color info = Color(0xFF2196F3);
+  static const Color divider = Color(0xFFE0E0E0);
 }
 
 class AppTextStyles {
