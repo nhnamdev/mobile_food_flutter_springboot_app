@@ -1,10 +1,58 @@
 import 'package:flutter/material.dart';
 import '../../config/app_theme.dart';
+import '../../services/supabase_google_auth_service.dart';
+import '../home/home_screen.dart';
 import 'sign_in_screen.dart';
 import 'sign_up_screen.dart';
 
-class WelcomeScreen extends StatelessWidget {
+class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen> {
+  bool _isLoading = false;
+  
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      final response = await SupabaseGoogleAuthService.signInWithGoogleWeb();
+      
+      if (mounted) {
+        if (response['success'] == true) {
+          // Web sẽ redirect, không cần navigate
+          // Nếu không redirect, navigate đến home
+          if (response['data'] != null) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'Đăng nhập Google thất bại'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +189,9 @@ class WelcomeScreen extends StatelessWidget {
                         text: 'FACEBOOK',
                         onPressed: () {
                           // TODO: Facebook login
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Facebook login chưa được hỗ trợ')),
+                          );
                         },
                       ),
                       const SizedBox(width: 20),
@@ -148,10 +199,8 @@ class WelcomeScreen extends StatelessWidget {
                       _SocialButton(
                         icon: Icons.g_mobiledata,
                         iconColor: Colors.red,
-                        text: 'GOOGLE',
-                        onPressed: () {
-                          // TODO: Google login
-                        },
+                        text: _isLoading ? 'ĐANG TẢI...' : 'GOOGLE',
+                        onPressed: _isLoading ? null : _signInWithGoogle,
                       ),
                     ],
                   ),
