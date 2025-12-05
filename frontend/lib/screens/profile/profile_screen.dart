@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/app_theme.dart';
 import '../../services/auth_service.dart';
-import '../../services/profile_service.dart';
+import '../../services/supabase_google_auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final int userId;
@@ -54,14 +55,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
     try {
-      final response = await ProfileService.getProfile(widget.userId);
-      if (response['success'] == true && response['data'] != null) {
-        final data = response['data'];
+      // Lấy user từ Supabase Auth thay vì backend
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
         setState(() {
-          _nameController.text = data['fullName'] ?? '';
-          _emailController.text = data['email'] ?? '';
-          _phoneController.text = data['phone'] ?? '';
-          _avatarUrl = data['avatar'];
+          _nameController.text = user.userMetadata?['full_name'] ?? 
+                                 user.userMetadata?['name'] ?? 
+                                 widget.initialName ?? '';
+          _emailController.text = user.email ?? widget.initialEmail ?? '';
+          _phoneController.text = user.phone ?? widget.initialPhone ?? '';
+          _avatarUrl = user.userMetadata?['avatar_url'] ?? 
+                       user.userMetadata?['picture'] ?? 
+                       widget.initialAvatar;
         });
       }
     } catch (e) {
@@ -80,25 +85,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     setState(() => _isLoading = true);
     try {
-      final response = await ProfileService.updateProfile(
-        userId: widget.userId,
-        fullName: _nameController.text.trim(),
-        phone: _phoneController.text.trim(),
-        avatar: _avatarUrl,
+      // Cập nhật user metadata trong Supabase
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(
+          data: {
+            'full_name': _nameController.text.trim(),
+            'phone': _phoneController.text.trim(),
+            'avatar_url': _avatarUrl,
+          },
+        ),
       );
       
-      if (response['success'] == true) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Cập nhật thành công!'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-          setState(() => _isEditing = false);
-        }
-      } else {
-        throw Exception(response['message'] ?? 'Cập nhật thất bại');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cập nhật thành công!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        setState(() => _isEditing = false);
       }
     } catch (e) {
       if (mounted) {
@@ -172,24 +177,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
               
               try {
-                final response = await ProfileService.changePassword(
-                  userId: widget.userId,
-                  currentPassword: currentPasswordController.text,
-                  newPassword: newPasswordController.text,
+                // Supabase không cần mật khẩu hiện tại để đổi mật khẩu
+                await Supabase.instance.client.auth.updateUser(
+                  UserAttributes(password: newPasswordController.text),
                 );
                 
                 Navigator.pop(context);
-                
-                if (response['success'] == true) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đổi mật khẩu thành công!'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
-                } else {
-                  throw Exception(response['message']);
-                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Đổi mật khẩu thành công!'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -221,12 +220,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
-              AuthService.logout();
-              Navigator.of(context).pushNamedAndRemoveUntil(
-                '/welcome',
-                (route) => false,
-              );
+            onPressed: () async {
+              await SupabaseGoogleAuthService.signOut();
+              if (mounted) {
+                Navigator.of(context).pushNamedAndRemoveUntil(
+                  '/welcome',
+                  (route) => false,
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
@@ -353,21 +354,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.location_on_outlined,
                       title: 'Địa chỉ giao hàng',
                       onTap: () {
-                        // Navigate to addresses screen
+                        Navigator.pushNamed(context, '/addresses');
                       },
                     ),
                     _buildMenuItem(
                       icon: Icons.receipt_long_outlined,
                       title: 'Lịch sử đơn hàng',
                       onTap: () {
-                        // Navigate to order history
+                        Navigator.pushNamed(context, '/order-history');
                       },
                     ),
                     _buildMenuItem(
                       icon: Icons.favorite_border,
                       title: 'Yêu thích',
                       onTap: () {
-                        // Navigate to favorites
+                        Navigator.pushNamed(context, '/favorites');
                       },
                     ),
                     _buildMenuItem(
@@ -394,15 +395,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildAvatar() {
     return Stack(
       children: [
-        CircleAvatar(
-          radius: 60,
-          backgroundColor: AppColors.inputBorder,
-          backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
-              ? NetworkImage(_avatarUrl!)
-              : null,
-          child: _avatarUrl == null || _avatarUrl!.isEmpty
-              ? const Icon(Icons.person, size: 60, color: AppColors.subColor)
-              : null,
+        Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.inputBorder,
+          ),
+          child: ClipOval(
+            child: _avatarUrl != null && _avatarUrl!.isNotEmpty
+                ? Image.network(
+                    _avatarUrl!,
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.person, size: 60, color: AppColors.subColor);
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primaryColor,
+                        ),
+                      );
+                    },
+                  )
+                : const Icon(Icons.person, size: 60, color: AppColors.subColor),
+          ),
         ),
         if (_isEditing)
           Positioned(
