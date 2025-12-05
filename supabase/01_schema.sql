@@ -24,6 +24,7 @@ CREATE TYPE order_status_enum AS ENUM ('pending', 'confirmed', 'preparing', 'rea
 -- =====================================================
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
+    supabase_uid VARCHAR(255) UNIQUE,
     email VARCHAR(255) UNIQUE NOT NULL,
     user_password VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
@@ -39,6 +40,7 @@ CREATE TABLE users (
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_phone ON users(phone);
 CREATE INDEX idx_users_role ON users(user_role);
+CREATE INDEX idx_users_supabase_uid ON users(supabase_uid);
 
 -- =====================================================
 -- USER ADDRESSES TABLE
