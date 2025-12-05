@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../../config/app_theme.dart';
 import '../../widgets/category_chip.dart';
 import '../../widgets/food_item_card.dart';
 import '../../services/category_service.dart';
 import '../../services/food_item_service.dart';
 import '../../services/user_session.dart';
+import '../../services/local_cart_manager.dart';
+import '../../services/local_favorites_manager.dart';
 import '../auth/sign_in_screen.dart';
+import '../food_detail/food_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,13 +25,79 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedTabIndex = 0; // 0 = Bán chạy, 1 = Đánh giá
   
   List<dynamic> _categories = [];
-  List<dynamic> _foodItems = [];
+  List<dynamic> _allFoodItems = []; // All food items
+  List<dynamic> _foodItems = []; // Filtered food items
   bool _isLoading = true;
+  bool _isFilteringCategory = false;
+  final _cart = LocalCartManager.instance;
+  final _favorites = LocalFavoritesManager.instance;
+  
+  // Address
+  Map<String, dynamic>? _selectedAddress;
+  List<Map<String, dynamic>> _addresses = [];
+  
+  // Notifications count (demo)
+  int _notificationCount = 0;
+  
+  // Scaffold key for drawer
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadAddresses();
+    _loadNotificationCount();
+    _cart.addListener(_onCartChanged);
+  }
+
+  @override
+  void dispose() {
+    _cart.removeListener(_onCartChanged);
+    super.dispose();
+  }
+
+  void _onCartChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadNotificationCount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final notificationsJson = prefs.getString('notifications');
+      if (notificationsJson != null) {
+        final List<dynamic> notifications = jsonDecode(notificationsJson);
+        _notificationCount = notifications.where((n) => n['isRead'] == false).length;
+      } else {
+        // Demo: 3 thông báo chưa đọc
+        _notificationCount = 3;
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error loading notifications: $e');
+    }
+  }
+
+  Future<void> _loadAddresses() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final addressesJson = prefs.getString('delivery_addresses');
+      if (addressesJson != null) {
+        final List<dynamic> decoded = jsonDecode(addressesJson);
+        _addresses = decoded.cast<Map<String, dynamic>>();
+        
+        // Tìm địa chỉ mặc định hoặc lấy địa chỉ đầu tiên
+        if (_addresses.isNotEmpty) {
+          _selectedAddress = _addresses.firstWhere(
+            (addr) => addr['isDefault'] == true,
+            orElse: () => _addresses.first,
+          );
+        }
+        if (mounted) setState(() {});
+      }
+    } catch (e) {
+      debugPrint('Error loading addresses: $e');
+    }
   }
 
   Future<void> _loadData() async {
@@ -37,7 +108,9 @@ class _HomeScreenState extends State<HomeScreen> {
       
       setState(() {
         _categories = categoriesResponse['data'] ?? [];
-        _foodItems = foodItemsResponse['data'] ?? [];
+        _allFoodItems = foodItemsResponse['data'] ?? [];
+        _foodItems = _allFoodItems;
+        _selectedCategoryIndex = 0; // Reset to "Tất cả"
         _isLoading = false;
       });
     } catch (e) {
@@ -53,10 +126,257 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showAddressSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        decoration: const BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Chọn địa chỉ giao hàng',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Address list
+            if (_addresses.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(40),
+                child: Column(
+                  children: [
+                    Icon(Icons.location_off_outlined, size: 60, color: Colors.grey.shade300),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Chưa có địa chỉ nào',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: _addresses.length,
+                  itemBuilder: (context, index) {
+                    final address = _addresses[index];
+                    final isSelected = _selectedAddress?['id'] == address['id'];
+                    return _buildAddressItem(address, isSelected);
+                  },
+                ),
+              ),
+            
+            // Add new address button
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/addresses').then((_) {
+                      _loadAddresses();
+                    });
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Thêm địa chỉ mới'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryColor,
+                    side: const BorderSide(color: AppColors.primaryColor),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddressItem(Map<String, dynamic> address, bool isSelected) {
+    final type = address['type'] ?? 'home';
+    final typeIcon = type == 'home' 
+        ? Icons.home_outlined 
+        : type == 'office' 
+            ? Icons.business_outlined 
+            : Icons.location_on_outlined;
+    
+    return InkWell(
+      onTap: () {
+        setState(() => _selectedAddress = address);
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã chọn: ${address['address']}'),
+            backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryColor.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.primaryColor : Colors.grey.shade200,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isSelected 
+                    ? AppColors.primaryColor.withOpacity(0.2) 
+                    : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                typeIcon, 
+                color: isSelected ? AppColors.primaryColor : Colors.grey,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        address['name'] ?? '',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (address['isDefault'] == true) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Mặc định',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    address['phone'] ?? '',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    address['address'] ?? '',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle, color: AppColors.primaryColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _filterByCategory(int index) async {
+    if (index == _selectedCategoryIndex) return;
+    
+    setState(() {
+      _selectedCategoryIndex = index;
+      _isFilteringCategory = true;
+    });
+
+    try {
+      if (index == 0) {
+        // "Tất cả" - show all items
+        setState(() {
+          _foodItems = _allFoodItems;
+          _isFilteringCategory = false;
+        });
+      } else {
+        // Filter by specific category
+        final categoryId = _categories[index - 1]['id'];
+        final response = await FoodItemService.getFoodItemsByCategory(categoryId);
+        setState(() {
+          _foodItems = response['data'] ?? [];
+          _isFilteringCategory = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isFilteringCategory = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi lọc danh mục: ${e.toString()}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.background,
+      drawer: _buildDrawer(),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator(color: AppColors.primaryColor))
@@ -81,9 +401,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     SliverToBoxAdapter(
                       child: _buildBanner(),
                     ),
-                    // Section Title - Đề xuất cho bạn
+                    // Section Title - Dynamic based on category
                     SliverToBoxAdapter(
-                      child: _buildSectionTitle('Đề xuất cho bạn', onSeeAll: () {}),
+                      child: _buildSectionTitle(
+                        _selectedCategoryIndex == 0 
+                            ? 'Đề xuất cho bạn' 
+                            : _categories.isNotEmpty && _selectedCategoryIndex - 1 < _categories.length
+                                ? _categories[_selectedCategoryIndex - 1]['categoryName'] ?? 'Món ăn'
+                                : 'Món ăn',
+                        onSeeAll: () {},
+                      ),
                     ),
                     // Food Grid
                     SliverToBoxAdapter(
@@ -116,57 +443,73 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Location
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.menu,
-                  color: AppColors.textPrimary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Text(
-                        'Deliver to',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.subColor,
+          Expanded(
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
                         ),
-                      ),
-                      Icon(
-                        Icons.keyboard_arrow_down,
-                        color: AppColors.subColor,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                  const Text(
-                    '4102 Pretty View Lane',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryColor,
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.menu,
+                      color: AppColors.textPrimary,
+                      size: 24,
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _showAddressSelector,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Text(
+                              'Giao đến',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.subColor,
+                              ),
+                            ),
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              color: AppColors.subColor,
+                              size: 16,
+                            ),
+                          ],
+                        ),
+                        Text(
+                          _selectedAddress != null
+                              ? _selectedAddress!['address'] ?? 'Chọn địa chỉ'
+                              : 'Thêm địa chỉ giao hàng',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: _selectedAddress != null 
+                                ? AppColors.primaryColor 
+                                : AppColors.subColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           // Avatar
           GestureDetector(
@@ -245,6 +588,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCategories() {
+    // Build category list with "Tất cả" at the beginning
+    final displayCategories = _categories.isEmpty
+        ? ['Tất cả', 'Fast Food', 'Pizza', 'Burger', 'Drinks', 'Dessert']
+        : ['Tất cả', ..._categories.map((c) => c['categoryName'] ?? c['name'] ?? '')];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -254,31 +602,31 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _categories.isEmpty ? 5 : _categories.length,
+            itemCount: displayCategories.length,
             itemBuilder: (context, index) {
-              if (_categories.isEmpty) {
-                // Show sample categories when API is not available
-                final sampleCategories = ['Fast Food', 'Pizza', 'Burger', 'Drinks', 'Dessert'];
-                return CategoryChip(
-                  name: sampleCategories[index],
-                  isSelected: index == _selectedCategoryIndex,
-                  onTap: () {
-                    setState(() => _selectedCategoryIndex = index);
-                  },
-                );
-              }
-              final category = _categories[index];
               return CategoryChip(
-                name: category['name'] ?? '',
-                iconUrl: category['imageUrl'],
+                name: displayCategories[index].toString(),
                 isSelected: index == _selectedCategoryIndex,
-                onTap: () {
-                  setState(() => _selectedCategoryIndex = index);
-                },
+                onTap: () => _filterByCategory(index),
               );
             },
           ),
         ),
+        // Loading indicator when filtering
+        if (_isFilteringCategory)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primaryColor,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -379,7 +727,45 @@ class _HomeScreenState extends State<HomeScreen> {
       {'name': 'Cơm Chiên', 'shop': 'Quán Việt', 'price': 35000.0, 'rating': 4.6},
     ];
 
-    final displayItems = _foodItems.isEmpty ? sampleFoods : _foodItems;
+    final displayItems = _foodItems.isEmpty && _allFoodItems.isEmpty ? sampleFoods : _foodItems;
+    
+    // Show message when no items in selected category
+    if (displayItems.isEmpty && !_isFilteringCategory) {
+      return Container(
+        height: 150,
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.restaurant_menu,
+                size: 40,
+                color: AppColors.subColor.withOpacity(0.5),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Không có món ăn trong danh mục này',
+                style: TextStyle(
+                  color: AppColors.subColor,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return SizedBox(
       height: 220,
@@ -389,18 +775,32 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: displayItems.length,
         itemBuilder: (context, index) {
           final item = displayItems[index];
+          final itemId = item['id'];
           return Padding(
             padding: const EdgeInsets.only(right: 16),
             child: FoodItemCard(
-              name: item['name'] ?? '',
-              shopName: item['shop'] ?? item['shopName'] ?? 'Shop',
+              id: itemId,
+              name: item['foodName'] ?? item['name'] ?? '',
+              shopName: item['shopName'] ?? item['shop']?['shopName'] ?? 'Shop',
+              shopId: item['shopId'] ?? item['shop']?['id'] ?? 0,
               price: (item['price'] ?? 0).toDouble(),
-              rating: (item['rating'] ?? item['averageRating'] ?? 4.5).toDouble(),
+              discountPrice: item['discountPrice']?.toDouble(),
+              rating: (item['averageRating'] ?? item['rating'] ?? 4.5).toDouble(),
               reviewCount: item['reviewCount'] ?? 25,
-              imageUrl: item['imageUrl'],
+              imageUrl: item['image'] ?? item['imageUrl'],
               isVerified: true,
               onTap: () {
-                // TODO: Navigate to food detail
+                if (itemId != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FoodDetailScreen(
+                        foodId: itemId,
+                        initialData: item,
+                      ),
+                    ),
+                  );
+                }
               },
             ),
           );
@@ -455,23 +855,53 @@ class _HomeScreenState extends State<HomeScreen> {
       {'name': 'Bánh Mì Thịt', 'shop': 'Bánh Mì Phượng', 'price': 25000.0, 'rating': 4.6, 'distance': '2.0km', 'time': '20 phút'},
     ];
 
-    final displayItems = _foodItems.isEmpty ? sampleFoods : _foodItems;
+    final displayItems = _foodItems.isEmpty && _allFoodItems.isEmpty ? sampleFoods : _foodItems;
+    
+    // Show empty state when filtering shows no results
+    if (displayItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Sort by rating or sales based on selected tab
+    final sortedItems = List<dynamic>.from(displayItems);
+    if (_selectedTabIndex == 1) {
+      // Sort by rating (Đánh giá)
+      sortedItems.sort((a, b) {
+        final ratingA = (a['rating'] ?? a['averageRating'] ?? 0).toDouble();
+        final ratingB = (b['rating'] ?? b['averageRating'] ?? 0).toDouble();
+        return ratingB.compareTo(ratingA);
+      });
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
-        children: displayItems.take(5).map((item) {
+        children: sortedItems.take(5).map((item) {
+          final itemId = item['id'];
           return FoodItemListTile(
-            name: item['name'] ?? '',
-            shopName: item['shop'] ?? item['shopName'] ?? 'Shop',
+            id: itemId,
+            name: item['foodName'] ?? item['name'] ?? '',
+            shopName: item['shopName'] ?? item['shop']?['shopName'] ?? 'Shop',
+            shopId: item['shopId'] ?? item['shop']?['id'] ?? 0,
             price: (item['price'] ?? 0).toDouble(),
-            rating: (item['rating'] ?? item['averageRating'] ?? 4.5).toDouble(),
+            discountPrice: item['discountPrice']?.toDouble(),
+            rating: (item['averageRating'] ?? item['rating'] ?? 4.5).toDouble(),
             distance: item['distance'],
             deliveryTime: item['time'] ?? item['deliveryTime'],
             discount: item['discount'],
-            imageUrl: item['imageUrl'],
+            imageUrl: item['image'] ?? item['imageUrl'],
             onTap: () {
-              // TODO: Navigate to food detail
+              if (itemId != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FoodDetailScreen(
+                      foodId: itemId,
+                      initialData: item,
+                    ),
+                  ),
+                );
+              }
             },
           );
         }).toList(),
@@ -499,8 +929,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildNavItem(Icons.home_filled, 'Trang chủ', 0),
           _buildNavItem(Icons.location_on, 'Gần bạn', 1),
           _buildNavItemCenter(),
-          _buildNavItem(Icons.favorite, 'Yêu thích', 3, badgeCount: 2),
-          _buildNavItem(Icons.notifications, 'Thông báo', 4, badgeCount: 5),
+          _buildNavItem(Icons.favorite, 'Yêu thích', 3, badgeCount: _favorites.foodFavoritesCount),
+          _buildNavItem(Icons.notifications, 'Thông báo', 4, badgeCount: _notificationCount),
         ],
       ),
     );
@@ -509,7 +939,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildNavItem(IconData icon, String label, int index, {int badgeCount = 0}) {
     final isSelected = _selectedBottomNavIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _selectedBottomNavIndex = index),
+      onTap: () {
+        setState(() => _selectedBottomNavIndex = index);
+        // Navigate to corresponding screen
+        switch (index) {
+          case 0:
+            // Home - already here
+            break;
+          case 1:
+            Navigator.pushNamed(context, '/nearby');
+            break;
+          case 3:
+            Navigator.pushNamed(context, '/favorites');
+            break;
+          case 4:
+            Navigator.pushNamed(context, '/notifications');
+            break;
+        }
+      },
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -557,10 +1004,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildNavItemCenter() {
+    final cartCount = _cart.itemCount;
     return GestureDetector(
       onTap: () {
-        // TODO: Navigate to cart
-        setState(() => _selectedBottomNavIndex = 2);
+        Navigator.pushNamed(context, '/cart');
       },
       child: Container(
         width: 60,
@@ -584,25 +1031,26 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.white,
               size: 28,
             ),
-            Positioned(
-              right: 10,
-              top: 10,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: AppColors.accentColor,
-                  shape: BoxShape.circle,
-                ),
-                child: const Text(
-                  '3',
-                  style: TextStyle(
-                    color: AppColors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+            if (cartCount > 0)
+              Positioned(
+                right: 10,
+                top: 10,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: AppColors.accentColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    cartCount > 9 ? '9+' : '$cartCount',
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
