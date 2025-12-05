@@ -1,5 +1,6 @@
 package com.foodapp.controller;
 
+import com.foodapp.dto.request.GoogleAuthRequest;
 import com.foodapp.dto.request.LoginRequest;
 import com.foodapp.dto.request.RegisterRequest;
 import com.foodapp.dto.response.ApiResponse;
@@ -33,6 +34,20 @@ public class AuthController {
         try {
             AuthResponse response = userService.login(request);
             return ResponseEntity.ok(ApiResponse.success("Login successful", response));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
+    /**
+     * Sync user từ Google OAuth (Supabase) vào database
+     * Gọi sau khi user đăng nhập Google thành công
+     */
+    @PostMapping("/google/sync")
+    public ResponseEntity<ApiResponse<UserResponse>> syncGoogleUser(@Valid @RequestBody GoogleAuthRequest request) {
+        try {
+            UserResponse user = userService.syncGoogleUser(request);
+            return ResponseEntity.ok(ApiResponse.success("User synced successfully", user));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
