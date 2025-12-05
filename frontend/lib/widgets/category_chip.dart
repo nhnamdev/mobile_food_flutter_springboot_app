@@ -15,16 +15,29 @@ class CategoryChip extends StatelessWidget {
     this.onTap,
   });
 
+  // Get first letter or abbreviation for category
+  String _getCategoryLetter() {
+    final lowerName = name.toLowerCase();
+    if (lowerName.contains('tất cả') || lowerName.contains('all')) {
+      return '⊞';
+    }
+    // Return first letter uppercase
+    if (name.isNotEmpty) {
+      return name[0].toUpperCase();
+    }
+    return '?';
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primaryColor : AppColors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(25),
           boxShadow: [
             BoxShadow(
               color: isSelected 
@@ -38,26 +51,33 @@ class CategoryChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (iconUrl != null) ...[
-              Image.network(
-                iconUrl!,
-                width: 20,
-                height: 20,
-                errorBuilder: (context, error, stackTrace) {
-                  return Icon(
-                    Icons.fastfood,
-                    size: 20,
-                    color: isSelected ? AppColors.white : AppColors.primaryColor,
-                  );
-                },
+            // Category letter box
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isSelected 
+                    ? AppColors.white.withOpacity(0.2) 
+                    : AppColors.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(width: 8),
-            ],
+              child: Center(
+                child: Text(
+                  _getCategoryLetter(),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? AppColors.white : AppColors.primaryColor,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             Text(
               name,
               style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
                 color: isSelected ? AppColors.white : AppColors.textPrimary,
               ),
             ),
