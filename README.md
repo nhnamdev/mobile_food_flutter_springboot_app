@@ -2,17 +2,11 @@
 
 Ứng dụng giao đồ ăn với Flutter mobile app và Spring Boot backend, sử dụng Supabase PostgreSQL.
 
-## 📁 Cấu trúc dự án
-
-```
-mobilevibe/
-├── backend/              # Spring Boot REST API
-├── frontend/             # Flutter mobile app
-└── supabase/            # Database schema & sample data
-```
 
 ## 🚀 Quick Start
-
+```bash
+flutter run -d edge --web-port=3000
+```
 ### 1. Setup Database (Supabase)
 
 Xem hướng dẫn chi tiết trong [`supabase/README.md`](supabase/README.md)
