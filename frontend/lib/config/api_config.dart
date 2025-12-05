@@ -30,6 +30,7 @@ class ApiConfig {
   // Auth endpoints
   static String get login => '$auth/login';
   static String get register => '$auth/register';
+  static String get googleSignIn => '$auth/google';
   
   // Profile endpoints
   static const String profile = '/profile';
