@@ -4,6 +4,7 @@ import '../../widgets/auth_background.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/custom_button.dart';
 import '../../services/auth_service.dart';
+import '../../services/supabase_google_auth_service.dart';
 import '../home/home_screen.dart';
 import 'sign_up_screen.dart';
 
@@ -19,6 +20,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
 
   @override
   void dispose() {
@@ -66,6 +68,41 @@ class _SignInScreenState extends State<SignInScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+  
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    
+    try {
+      final response = await SupabaseGoogleAuthService.signInWithGoogleWeb();
+      
+      if (mounted) {
+        if (response['success'] == true) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'Đăng nhập Google thất bại'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -240,7 +277,9 @@ class _SignInScreenState extends State<SignInScreen> {
                           text: 'FACEBOOK',
                           iconPath: 'assets/icons/facebook.png',
                           onPressed: () {
-                            // TODO: Implement Facebook login
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Facebook login chưa được hỗ trợ')),
+                            );
                           },
                         ),
                       ),
@@ -248,11 +287,9 @@ class _SignInScreenState extends State<SignInScreen> {
                       // Google Button
                       Expanded(
                         child: SocialButton(
-                          text: 'GOOGLE',
+                          text: _isGoogleLoading ? 'ĐANG TẢI...' : 'GOOGLE',
                           iconPath: 'assets/icons/google.png',
-                          onPressed: () {
-                            // TODO: Implement Google login
-                          },
+                          onPressed: _isGoogleLoading ? null : _signInWithGoogle,
                         ),
                       ),
                     ],
