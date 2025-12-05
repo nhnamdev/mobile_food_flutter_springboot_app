@@ -1,32 +1,140 @@
 import 'package:flutter/material.dart';
 import '../../config/app_theme.dart';
+import '../../services/local_cart_manager.dart';
+import '../../services/local_favorites_manager.dart';
 
-class FoodItemCard extends StatelessWidget {
+class FoodItemCard extends StatefulWidget {
+  final int? id;
   final String? imageUrl;
   final String name;
   final String shopName;
+  final int shopId;
   final double price;
+  final double? discountPrice;
   final double rating;
   final int reviewCount;
   final bool isVerified;
   final VoidCallback? onTap;
+  final bool showAddToCart;
+  final bool showFavorite;
 
   const FoodItemCard({
     super.key,
+    this.id,
     this.imageUrl,
     required this.name,
     required this.shopName,
+    this.shopId = 0,
     required this.price,
+    this.discountPrice,
     required this.rating,
     this.reviewCount = 0,
     this.isVerified = false,
     this.onTap,
+    this.showAddToCart = true,
+    this.showFavorite = true,
   });
+
+  @override
+  State<FoodItemCard> createState() => _FoodItemCardState();
+}
+
+class _FoodItemCardState extends State<FoodItemCard> {
+  bool _isFavorite = false;
+  final _favorites = LocalFavoritesManager.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavoriteStatus();
+  }
+
+  Future<void> _loadFavoriteStatus() async {
+    if (widget.id == null) return;
+    await _favorites.init();
+    if (mounted) {
+      setState(() {
+        _isFavorite = _favorites.isFoodFavorite(widget.id!);
+      });
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (widget.id == null) return;
+    
+    final newStatus = await _favorites.toggleFoodFavorite(widget.id!);
+    
+    if (mounted) {
+      setState(() => _isFavorite = newStatus);
+      
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                newStatus ? Icons.favorite : Icons.favorite_border,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Text(newStatus ? 'Đã thêm vào yêu thích' : 'Đã xóa khỏi yêu thích'),
+            ],
+          ),
+          backgroundColor: newStatus ? AppColors.primaryColor : AppColors.subColor,
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  void _addToCart(BuildContext context) {
+    if (widget.id == null) return;
+    
+    final cart = LocalCartManager.instance;
+    cart.addFromFoodData(
+      id: widget.id!,
+      name: widget.name,
+      shopName: widget.shopName,
+      shopId: widget.shopId,
+      price: widget.price,
+      discountPrice: widget.discountPrice,
+      imageUrl: widget.imageUrl,
+    );
+    
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Đã thêm "${widget.name}" vào giỏ hàng'),
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.success,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        action: SnackBarAction(
+          label: 'Xem giỏ',
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.pushNamed(context, '/cart');
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
         width: 160,
         decoration: BoxDecoration(
@@ -48,9 +156,9 @@ class FoodItemCard extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                  child: imageUrl != null
+                  child: widget.imageUrl != null
                       ? Image.network(
-                          imageUrl!,
+                          widget.imageUrl!,
                           height: 110,
                           width: double.infinity,
                           fit: BoxFit.cover,
@@ -71,7 +179,7 @@ class FoodItemCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${price.toStringAsFixed(0)}đ',
+                      '${widget.price.toStringAsFixed(0)}đ',
                       style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 12,
@@ -80,30 +188,62 @@ class FoodItemCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Favorite Button
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 8,
+                // Add to Cart Button
+                if (widget.showAddToCart && widget.id != null)
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () => _addToCart(context),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryColor.withOpacity(0.4),
+                              blurRadius: 8,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.favorite_border,
-                      size: 16,
-                      color: AppColors.primaryColor,
+                        child: const Icon(
+                          Icons.add,
+                          size: 20,
+                          color: AppColors.white,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                // Favorite Button
+                if (widget.showFavorite && widget.id != null)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: _toggleFavorite,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          _isFavorite ? Icons.favorite : Icons.favorite_border,
+                          size: 16,
+                          color: AppColors.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
             // Content
@@ -118,7 +258,7 @@ class FoodItemCard extends StatelessWidget {
                       const Icon(Icons.star, color: AppColors.accentColor, size: 16),
                       const SizedBox(width: 4),
                       Text(
-                        rating.toStringAsFixed(1),
+                        widget.rating.toStringAsFixed(1),
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -126,7 +266,7 @@ class FoodItemCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        ' ($reviewCount)',
+                        ' (${widget.reviewCount})',
                         style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.subColor,
@@ -137,7 +277,7 @@ class FoodItemCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   // Food Name
                   Text(
-                    name,
+                    widget.name,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -150,13 +290,13 @@ class FoodItemCard extends StatelessWidget {
                   // Shop Name
                   Row(
                     children: [
-                      if (isVerified) ...[
+                      if (widget.isVerified) ...[
                         const Icon(Icons.verified, color: Colors.green, size: 14),
                         const SizedBox(width: 4),
                       ],
                       Expanded(
                         child: Text(
-                          shopName,
+                          widget.shopName,
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.subColor,
@@ -191,28 +331,77 @@ class FoodItemCard extends StatelessWidget {
 }
 
 class FoodItemListTile extends StatelessWidget {
+  final int? id;
   final String? imageUrl;
   final String name;
   final String shopName;
+  final int shopId;
   final double price;
+  final double? discountPrice;
   final double rating;
   final String? distance;
   final String? deliveryTime;
   final String? discount;
   final VoidCallback? onTap;
+  final bool showAddToCart;
 
   const FoodItemListTile({
     super.key,
+    this.id,
     this.imageUrl,
     required this.name,
     required this.shopName,
+    this.shopId = 0,
     required this.price,
+    this.discountPrice,
     required this.rating,
     this.distance,
     this.deliveryTime,
     this.discount,
     this.onTap,
+    this.showAddToCart = true,
   });
+
+  void _addToCart(BuildContext context) {
+    if (id == null) return;
+    
+    final cart = LocalCartManager.instance;
+    cart.addFromFoodData(
+      id: id!,
+      name: name,
+      shopName: shopName,
+      shopId: shopId,
+      price: price,
+      discountPrice: discountPrice,
+      imageUrl: imageUrl,
+    );
+    
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Đã thêm "$name" vào giỏ hàng'),
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.success,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        action: SnackBarAction(
+          label: 'Xem giỏ',
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.pushNamed(context, '/cart');
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -343,7 +532,7 @@ class FoodItemListTile extends StatelessWidget {
                 ),
               ),
             ),
-            // Price
+            // Price and Add to Cart
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: Column(
@@ -356,6 +545,31 @@ class FoodItemListTile extends StatelessWidget {
                       color: AppColors.primaryColor,
                     ),
                   ),
+                  if (showAddToCart && id != null) ...[
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => _addToCart(context),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryColor.withOpacity(0.4),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.add,
+                          size: 18,
+                          color: AppColors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
